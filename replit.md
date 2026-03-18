@@ -48,6 +48,16 @@ Every package extends `tsconfig.base.json` which sets `composite: true`. The roo
 - `pnpm run build` — runs `typecheck` first, then recursively runs `build` in all packages that define it
 - `pnpm run typecheck` — runs `tsc --build --emitDeclarationOnly` using project references
 
+## Artifacts
+
+### `artifacts/anime-world` (`@workspace/anime-world`)
+
+React + Vite anime discovery web app. Uses Jikan API (https://api.jikan.moe/v4) for real MyAnimeList data. No backend needed.
+
+Pages: Home (hero + trending), Browse (search + filters), Top Anime, Genres, Anime Detail.
+Stack: React, Vite, Tailwind CSS, Framer Motion, Wouter, Lucide Icons.
+Serves at `/` (root preview path).
+
 ## Packages
 
 ### `artifacts/api-server` (`@workspace/api-server`)

@@ -1,0 +1,15 @@
+packages:
+  "framer-motion": "For cinematic micro-interactions, staggered card reveals, and page transitions"
+  "lucide-react": "For beautiful consistent iconography"
+  "clsx": "Utility for conditionally joining classNames"
+  "tailwind-merge": "Utility for merging tailwind classes without style conflicts"
+
+images:
+  - path: "artifacts/anime-world/public/images/hero-bg.png"
+    description: "Cinematic futuristic cyberpunk city landscape at night with vibrant neon blue and purple lights, dark moody atmosphere, highly detailed, anime style background, wide establishing shot"
+    aspect_ratio: "16:9"
+
+notes:
+  - "App uses the public Jikan API (https://api.jikan.moe/v4). It is a REST API with no authentication."
+  - "Jikan API has strict rate limits (3 requests/second). Data fetching hooks handle errors gracefully."
+  - "App is purely frontend, utilizing external API. No local backend required."
