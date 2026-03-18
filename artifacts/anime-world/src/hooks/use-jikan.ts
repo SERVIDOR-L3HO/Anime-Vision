@@ -1,9 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
-import { JikanResponse, Anime, Genre, Character } from "@/lib/types";
+import { JikanResponse, Anime, Genre, Character, Episode, WatchEntry } from "@/lib/types";
 
 const BASE_URL = "https://api.jikan.moe/v4";
 
-// Helper to handle API rate limits and basic fetch
 async function fetchJikan<T>(endpoint: string): Promise<T> {
   const res = await fetch(`${BASE_URL}${endpoint}`);
   if (!res.ok) {
@@ -23,7 +22,7 @@ export function useTopAnime(filter?: "airing" | "upcoming" | "bypopularity" | "f
       if (filter) url += `&filter=${filter}`;
       return fetchJikan<JikanResponse<Anime[]>>(url);
     },
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    staleTime: 1000 * 60 * 5,
   });
 }
 
@@ -34,11 +33,10 @@ export function useSearchAnime(query: string, genreId?: string, page: number = 1
       let url = `/anime?page=${page}&limit=24`;
       if (query) url += `&q=${encodeURIComponent(query)}`;
       if (genreId) url += `&genres=${genreId}`;
-      url += `&sfw=true`; // Keep it safe for work
+      url += `&sfw=true`;
       return fetchJikan<JikanResponse<Anime[]>>(url);
     },
-    // Don't run query if empty search and no genre
-    enabled: true, 
+    enabled: true,
   });
 }
 
@@ -58,10 +56,27 @@ export function useAnimeCharacters(id: string) {
   });
 }
 
+export function useAnimeEpisodes(id: string, page: number = 1) {
+  return useQuery({
+    queryKey: ["anime-episodes", id, page],
+    queryFn: () => fetchJikan<JikanResponse<Episode[]>>(`/anime/${id}/episodes?page=${page}`),
+    enabled: !!id,
+    staleTime: 1000 * 60 * 10,
+  });
+}
+
+export function useRecentEpisodes() {
+  return useQuery({
+    queryKey: ["recent-episodes"],
+    queryFn: () => fetchJikan<JikanResponse<WatchEntry[]>>(`/watch/episodes`),
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
 export function useGenres() {
   return useQuery({
     queryKey: ["genres"],
     queryFn: () => fetchJikan<JikanResponse<Genre[]>>(`/genres/anime?filter=genres`),
-    staleTime: 1000 * 60 * 60 * 24, // 24 hours (genres rarely change)
+    staleTime: 1000 * 60 * 60 * 24,
   });
 }

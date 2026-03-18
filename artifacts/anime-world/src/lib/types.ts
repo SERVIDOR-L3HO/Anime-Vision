@@ -77,3 +77,39 @@ export interface Character {
   };
   role: string;
 }
+
+export interface Episode {
+  mal_id: number;
+  url: string;
+  title: string;
+  title_japanese?: string;
+  title_romanji?: string;
+  aired?: string;
+  score?: number;
+  filler: boolean;
+  recap: boolean;
+  forum_url?: string;
+}
+
+export interface WatchEpisodeItem {
+  mal_id: number;
+  url: string;
+  title: string;
+  episode: string;
+  filler: boolean;
+  recap: boolean;
+}
+
+export interface WatchEntry {
+  entry: {
+    mal_id: number;
+    url: string;
+    images: {
+      jpg: AnimeImage;
+      webp: AnimeImage;
+    };
+    title: string;
+  };
+  episodes: WatchEpisodeItem[];
+  region_locked: boolean;
+}
