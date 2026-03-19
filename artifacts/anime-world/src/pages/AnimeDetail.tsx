@@ -2,10 +2,10 @@ import { useState } from "react";
 import { useRoute } from "wouter";
 import { useAnimeDetail, useAnimeCharacters, useAnimeEpisodes } from "@/hooks/use-jikan";
 import { LoadingSpinner, ErrorMessage } from "@/components/ui/Loading";
-import { Star, Play, Clock, Tv, Users, Hash, ChevronLeft, ChevronRight, Film, BookOpen, List } from "lucide-react";
+import { Star, Play, Clock, Tv, Users, Hash, ChevronLeft, ChevronRight, Film, BookOpen, List, Youtube } from "lucide-react";
 import { motion } from "framer-motion";
 
-type Tab = "info" | "episodes" | "characters";
+type Tab = "info" | "trailer" | "episodes" | "characters";
 
 export default function AnimeDetail() {
   const [, params] = useRoute("/anime/:id");
@@ -26,8 +26,9 @@ export default function AnimeDetail() {
   const episodes = episodesData?.data || [];
   const hasNextEpPage = episodesData?.pagination?.has_next_page ?? false;
 
-  const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
+  const tabs: { id: Tab; label: string; icon: React.ReactNode; hidden?: boolean }[] = [
     { id: "info", label: "Información", icon: <BookOpen className="w-4 h-4" /> },
+    { id: "trailer", label: "Trailer", icon: <Youtube className="w-4 h-4" />, hidden: !anime.trailer?.embed_url },
     { id: "episodes", label: `Episodios${anime.episodes ? ` (${anime.episodes})` : ""}`, icon: <List className="w-4 h-4" /> },
     { id: "characters", label: "Personajes", icon: <Users className="w-4 h-4" /> },
   ];
@@ -135,8 +136,8 @@ export default function AnimeDetail() {
               </div>
 
               {/* Tabs */}
-              <div className="flex gap-1 mb-8 border-b border-white/10 pb-0">
-                {tabs.map((t) => (
+              <div className="flex gap-1 mb-8 border-b border-white/10 pb-0 flex-wrap">
+                {tabs.filter(t => !t.hidden).map((t) => (
                   <button
                     key={t.id}
                     onClick={() => setTab(t.id)}
@@ -165,6 +166,28 @@ export default function AnimeDetail() {
                       <p className="text-white/60 leading-relaxed text-base">{anime.background}</p>
                     </>
                   )}
+                </div>
+              )}
+
+              {/* Tab: Trailer */}
+              {tab === "trailer" && anime.trailer?.embed_url && (
+                <div>
+                  <div className="flex items-center gap-3 mb-5">
+                    <Youtube className="w-6 h-6 text-red-500" />
+                    <h3 className="text-xl font-bold text-white">Trailer Oficial</h3>
+                  </div>
+                  <div className="relative w-full rounded-2xl overflow-hidden border border-white/10 shadow-[0_0_40px_rgba(0,0,0,0.6)] bg-black" style={{ paddingBottom: "56.25%" }}>
+                    <iframe
+                      src={`${anime.trailer.embed_url}?autoplay=0&rel=0&modestbranding=1`}
+                      title={`Trailer de ${anime.title}`}
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      className="absolute inset-0 w-full h-full"
+                    />
+                  </div>
+                  <p className="text-muted-foreground text-sm mt-4 text-center">
+                    Trailer oficial vía YouTube
+                  </p>
                 </div>
               )}
 
