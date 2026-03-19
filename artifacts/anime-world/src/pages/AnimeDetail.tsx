@@ -1,9 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRoute } from "wouter";
 import { useAnimeDetail, useAnimeCharacters, useAnimeEpisodes } from "@/hooks/use-jikan";
+import { useSearchAnimeStream, useAnimeStreamInfo, useEpisodeEmbed } from "@/hooks/use-streaming";
+import { VideoPlayer } from "@/components/VideoPlayer";
 import { LoadingSpinner, ErrorMessage } from "@/components/ui/Loading";
-import { Star, Play, Clock, Tv, Users, Hash, ChevronLeft, ChevronRight, Film, BookOpen, List, Youtube } from "lucide-react";
-import { motion } from "framer-motion";
+import {
+  Star, Play, Clock, Tv, Users, Hash, ChevronLeft, ChevronRight,
+  Film, BookOpen, List, Youtube, Search, AlertCircle, Loader2
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 type Tab = "info" | "trailer" | "episodes" | "characters";
 
@@ -13,9 +18,63 @@ export default function AnimeDetail() {
   const [tab, setTab] = useState<Tab>("info");
   const [epPage, setEpPage] = useState(1);
 
+  const [selectedEp, setSelectedEp] = useState<number | null>(null);
+  const [streamAnimeId, setStreamAnimeId] = useState<string | null>(null);
+  const [searchEnabled, setSearchEnabled] = useState(false);
+  const [multipleResults, setMultipleResults] = useState<{ id: string; title: string; image?: string; subOrDub?: string }[] | null>(null);
+
   const { data: animeData, isLoading, error } = useAnimeDetail(id);
   const { data: charData } = useAnimeCharacters(id);
   const { data: episodesData, isLoading: epLoading } = useAnimeEpisodes(id, epPage);
+
+  const animeTitle = animeData?.data?.title_english || animeData?.data?.title || "";
+
+  const { data: searchData, isLoading: searchLoading, error: searchError } = useSearchAnimeStream(
+    animeTitle,
+    searchEnabled && !streamAnimeId
+  );
+
+  const { data: streamInfo, isLoading: infoLoading } = useAnimeStreamInfo(
+    streamAnimeId || "",
+    !!streamAnimeId
+  );
+
+  const { data: episodeData, isLoading: embedLoading, error: embedError } = useEpisodeEmbed(
+    streamAnimeId || "",
+    selectedEp,
+    !!streamAnimeId && selectedEp !== null
+  );
+
+  useEffect(() => {
+    if (searchData && !streamAnimeId) {
+      const results = searchData.results;
+      if (results.length === 0) {
+        setSearchEnabled(false);
+      } else if (results.length === 1) {
+        setStreamAnimeId(results[0].id);
+      } else {
+        const exact = results.find(
+          (r) => r.title.toLowerCase() === animeTitle.toLowerCase()
+        );
+        if (exact) {
+          setStreamAnimeId(exact.id);
+        } else {
+          setMultipleResults(results.slice(0, 5));
+        }
+      }
+    }
+  }, [searchData]);
+
+  const handleWatchEpisode = (epNumber: number) => {
+    setSelectedEp(epNumber);
+    if (!streamAnimeId) {
+      setSearchEnabled(true);
+    }
+  };
+
+  const handleClosePlayer = () => {
+    setSelectedEp(null);
+  };
 
   if (isLoading) return <div className="pt-32"><LoadingSpinner /></div>;
   if (error) return <div className="pt-32"><ErrorMessage message={error.message} /></div>;
@@ -25,6 +84,8 @@ export default function AnimeDetail() {
   const imageUrl = anime.images.webp.large_image_url || anime.images.jpg.large_image_url;
   const episodes = episodesData?.data || [];
   const hasNextEpPage = episodesData?.pagination?.has_next_page ?? false;
+
+  const isPlayerLoading = searchLoading || infoLoading || (!!streamAnimeId && embedLoading && selectedEp !== null);
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode; hidden?: boolean }[] = [
     { id: "info", label: "Información", icon: <BookOpen className="w-4 h-4" /> },
@@ -194,6 +255,86 @@ export default function AnimeDetail() {
               {/* Tab: Episodes */}
               {tab === "episodes" && (
                 <div>
+                  {/* Video Player Area */}
+                  <AnimatePresence>
+                    {selectedEp !== null && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="mb-6 overflow-hidden"
+                      >
+                        {isPlayerLoading ? (
+                          <div className="flex flex-col items-center justify-center py-16 gap-4 bg-black/40 rounded-2xl border border-white/10">
+                            <Loader2 className="w-10 h-10 text-primary animate-spin" />
+                            <div className="text-center">
+                              <p className="text-white font-semibold">Buscando episodio {selectedEp}...</p>
+                              <p className="text-muted-foreground text-sm mt-1">
+                                {searchLoading ? "Buscando en servidores de streaming..." :
+                                 infoLoading ? "Obteniendo lista de episodios..." :
+                                 "Cargando fuentes de video..."}
+                              </p>
+                            </div>
+                          </div>
+                        ) : multipleResults && !streamAnimeId ? (
+                          <div className="bg-black/40 rounded-2xl border border-white/10 p-5">
+                            <div className="flex items-center gap-2 mb-4">
+                              <Search className="w-5 h-5 text-primary" />
+                              <h4 className="text-white font-bold">Selecciona el anime correcto</h4>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              {multipleResults.map((r) => (
+                                <button
+                                  key={r.id}
+                                  onClick={() => {
+                                    setStreamAnimeId(r.id);
+                                    setMultipleResults(null);
+                                  }}
+                                  className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/10 hover:border-primary/50 hover:bg-primary/5 transition-all text-left"
+                                >
+                                  {r.image && (
+                                    <img src={r.image} alt={r.title as string} className="w-12 h-16 object-cover rounded-lg flex-shrink-0" />
+                                  )}
+                                  <div className="min-w-0">
+                                    <p className="text-white font-semibold text-sm leading-tight line-clamp-2">{r.title as string}</p>
+                                    {r.subOrDub && (
+                                      <span className="text-xs text-primary font-bold uppercase mt-1 block">{r.subOrDub}</span>
+                                    )}
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (searchError || embedError) && !isPlayerLoading ? (
+                          <div className="flex flex-col items-center justify-center py-12 gap-4 bg-black/40 rounded-2xl border border-red-500/20">
+                            <AlertCircle className="w-10 h-10 text-red-400" />
+                            <div className="text-center">
+                              <p className="text-white font-semibold">No se pudo cargar el episodio</p>
+                              <p className="text-muted-foreground text-sm mt-1">
+                                El servidor de streaming no está disponible en este momento.
+                              </p>
+                            </div>
+                            <button
+                              onClick={handleClosePlayer}
+                              className="px-4 py-2 rounded-xl bg-white/10 text-white text-sm font-medium hover:bg-white/20 transition-all"
+                            >
+                              Cerrar
+                            </button>
+                          </div>
+                        ) : episodeData && streamAnimeId ? (
+                          <VideoPlayer
+                            sources={episodeData.allSources}
+                            headers={episodeData.headers}
+                            download={episodeData.download}
+                            episodeNumber={selectedEp}
+                            animeTitle={anime.title_english || anime.title}
+                            onClose={handleClosePlayer}
+                          />
+                        ) : null}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
                   {epLoading ? (
                     <LoadingSpinner />
                   ) : episodes.length === 0 ? (
@@ -202,28 +343,39 @@ export default function AnimeDetail() {
                     <>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-6">
                         {episodes.map((ep, i) => (
-                          <motion.div
+                          <motion.button
                             key={ep.mal_id}
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.2, delay: i * 0.02 }}
-                            className={`group flex items-center gap-3 p-3.5 rounded-xl border transition-all cursor-pointer ${
-                              ep.filler
+                            onClick={() => handleWatchEpisode(ep.mal_id)}
+                            className={`group flex items-center gap-3 p-3.5 rounded-xl border transition-all text-left w-full ${
+                              selectedEp === ep.mal_id
+                                ? "bg-primary/10 border-primary/60 shadow-[0_0_15px_rgba(0,240,255,0.1)]"
+                                : ep.filler
                                 ? "bg-yellow-500/5 border-yellow-500/20 hover:border-yellow-500/40"
                                 : ep.recap
                                 ? "bg-blue-500/5 border-blue-500/20 hover:border-blue-500/40"
                                 : "bg-white/5 border-white/8 hover:border-primary/40 hover:bg-white/10"
                             }`}
                           >
-                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-black text-sm flex-shrink-0 ${
-                              ep.filler ? "bg-yellow-500/20 text-yellow-400" :
-                              ep.recap ? "bg-blue-500/20 text-blue-400" :
-                              "bg-primary/20 text-primary"
+                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 transition-all ${
+                              selectedEp === ep.mal_id
+                                ? "bg-primary text-primary-foreground"
+                                : ep.filler ? "bg-yellow-500/20 text-yellow-400" :
+                                  ep.recap ? "bg-blue-500/20 text-blue-400" :
+                                  "bg-primary/20 text-primary group-hover:bg-primary/30"
                             }`}>
-                              {ep.mal_id}
+                              {selectedEp === ep.mal_id ? (
+                                <Play className="w-4 h-4 fill-current" />
+                              ) : (
+                                <span className="font-black text-sm">{ep.mal_id}</span>
+                              )}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="font-semibold text-white text-sm leading-tight line-clamp-1 group-hover:text-primary transition-colors">
+                              <p className={`font-semibold text-sm leading-tight line-clamp-1 transition-colors ${
+                                selectedEp === ep.mal_id ? "text-primary" : "text-white group-hover:text-primary"
+                              }`}>
                                 {ep.title || `Episodio ${ep.mal_id}`}
                               </p>
                               <div className="flex items-center gap-2 mt-0.5">
@@ -236,13 +388,23 @@ export default function AnimeDetail() {
                                 {ep.recap && <span className="text-[10px] font-bold text-blue-400 bg-blue-400/10 px-1.5 py-0.5 rounded">Recap</span>}
                               </div>
                             </div>
-                            {ep.score && (
-                              <div className="flex items-center gap-1 text-yellow-400 flex-shrink-0">
-                                <Star className="w-3 h-3 fill-current" />
-                                <span className="text-xs font-bold">{ep.score.toFixed(1)}</span>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              {ep.score && (
+                                <div className="flex items-center gap-1 text-yellow-400">
+                                  <Star className="w-3 h-3 fill-current" />
+                                  <span className="text-xs font-bold">{ep.score.toFixed(1)}</span>
+                                </div>
+                              )}
+                              <div className={`flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg transition-all ${
+                                selectedEp === ep.mal_id
+                                  ? "bg-primary/20 text-primary"
+                                  : "bg-white/5 text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary"
+                              }`}>
+                                <Play className="w-3 h-3" />
+                                Ver
                               </div>
-                            )}
-                          </motion.div>
+                            </div>
+                          </motion.button>
                         ))}
                       </div>
 
