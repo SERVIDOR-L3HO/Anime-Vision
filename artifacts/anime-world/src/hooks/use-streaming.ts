@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 
-const API_BASE = "/api/streaming";
+const API_BASE = `${import.meta.env.VITE_API_URL || ""}/api/streaming`;
 
 export interface StreamingResult {
   id: string;
