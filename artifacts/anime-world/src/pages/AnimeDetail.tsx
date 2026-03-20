@@ -21,6 +21,7 @@ export default function AnimeDetail() {
   const [selectedEp, setSelectedEp] = useState<number | null>(null);
   const [streamAnimeId, setStreamAnimeId] = useState<string | null>(null);
   const [searchEnabled, setSearchEnabled] = useState(false);
+  const [noStreamAvailable, setNoStreamAvailable] = useState(false);
   const [multipleResults, setMultipleResults] = useState<{ id: string; title: string; image?: string; subOrDub?: string }[] | null>(null);
 
   const { data: animeData, isLoading, error } = useAnimeDetail(id);
@@ -50,6 +51,7 @@ export default function AnimeDetail() {
       const results = searchData.results;
       if (results.length === 0) {
         setSearchEnabled(false);
+        setNoStreamAvailable(true);
       } else if (results.length === 1) {
         setStreamAnimeId(results[0].id);
       } else {
@@ -74,6 +76,7 @@ export default function AnimeDetail() {
 
   const handleClosePlayer = () => {
     setSelectedEp(null);
+    setNoStreamAvailable(false);
   };
 
   if (isLoading) return <div className="pt-32"><LoadingSpinner /></div>;
@@ -304,6 +307,22 @@ export default function AnimeDetail() {
                                 </button>
                               ))}
                             </div>
+                          </div>
+                        ) : noStreamAvailable ? (
+                          <div className="flex flex-col items-center justify-center py-12 gap-4 bg-black/40 rounded-2xl border border-white/10">
+                            <AlertCircle className="w-10 h-10 text-yellow-400" />
+                            <div className="text-center">
+                              <p className="text-white font-semibold">Streaming no disponible</p>
+                              <p className="text-muted-foreground text-sm mt-1">
+                                No se encontró este anime en los servidores de streaming.
+                              </p>
+                            </div>
+                            <button
+                              onClick={handleClosePlayer}
+                              className="px-4 py-2 rounded-xl bg-white/10 text-white text-sm font-medium hover:bg-white/20 transition-all"
+                            >
+                              Cerrar
+                            </button>
                           </div>
                         ) : (searchError || embedError) && !isPlayerLoading ? (
                           <div className="flex flex-col items-center justify-center py-12 gap-4 bg-black/40 rounded-2xl border border-red-500/20">

@@ -49,7 +49,6 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "PORT=8000 pnpm --filter @workspace/api-server run dev"
-waitForPort = 8000
 
 [workflows.workflow.metadata]
 outputType = "console"

@@ -54,9 +54,17 @@ Every package extends `tsconfig.base.json` which sets `composite: true`. The roo
 
 React + Vite anime discovery web app. Uses Jikan API (https://api.jikan.moe/v4) for real MyAnimeList data. No backend needed.
 
-Pages: Home (hero + trending), Browse (search + filters), Top Anime, Genres, Anime Detail.
-Stack: React, Vite, Tailwind CSS, Framer Motion, Wouter, Lucide Icons.
-Serves at `/` (root preview path).
+Pages: Home (hero + trending), Browse (search + filters), Top Anime, Genres, Anime Detail (with streaming).
+Stack: React, Vite, Tailwind CSS, Framer Motion, Wouter, Lucide Icons, hls.js.
+Serves at `/` (root preview path). Vite proxies `/api/*` → `http://localhost:8000`.
+
+**Streaming System:**
+- Uses `@consumet/extensions` AnimePahe provider for video sources
+- API routes at `/api/streaming/*` (search, info, watch, embed) in api-server
+- VideoPlayer component with hls.js for M3U8 playback + quality selector + download links
+- Episode tab in AnimeDetail auto-searches AnimePahe by anime title, shows video player inline
+- AnimePahe returns M3U8 streams from uwucdn.top (360p/800p) with Referer header required
+- Import pattern: `import pkg from "@consumet/extensions"; const { ANIME } = pkg;`
 
 ## Packages
 

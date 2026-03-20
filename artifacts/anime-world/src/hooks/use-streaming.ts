@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 
 const API_BASE = "/api/streaming";
 
@@ -21,13 +21,18 @@ export interface StreamingInfo {
   episodes?: { id: string; number: number; url: string }[];
 }
 
+export interface DownloadLink {
+  url: string;
+  quality: string;
+}
+
 export interface EpisodeData {
   episodeId: string;
   episodeNumber: number;
   source?: EpisodeSource;
   allSources?: EpisodeSource[];
   headers?: Record<string, string>;
-  download?: string;
+  download?: DownloadLink[];
 }
 
 async function searchAnimeStream(title: string): Promise<{ results: StreamingResult[] }> {
@@ -37,13 +42,13 @@ async function searchAnimeStream(title: string): Promise<{ results: StreamingRes
 }
 
 async function getAnimeStreamInfo(id: string): Promise<StreamingInfo> {
-  const res = await fetch(`${API_BASE}/info/${encodeURIComponent(id)}`);
+  const res = await fetch(`${API_BASE}/info?id=${encodeURIComponent(id)}`);
   if (!res.ok) throw new Error("Error obteniendo información");
   return res.json();
 }
 
 async function getEpisodeEmbed(animeId: string, episode: number): Promise<EpisodeData> {
-  const res = await fetch(`${API_BASE}/embed/${encodeURIComponent(animeId)}/${episode}`);
+  const res = await fetch(`${API_BASE}/embed?animeId=${encodeURIComponent(animeId)}&episode=${episode}`);
   if (!res.ok) throw new Error("Error obteniendo episodio");
   return res.json();
 }

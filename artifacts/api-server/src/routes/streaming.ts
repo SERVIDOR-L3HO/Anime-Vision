@@ -1,10 +1,10 @@
 import { Router, type Request, type Response } from "express";
-import { ANIME } from "@consumet/extensions";
+import pkg from "@consumet/extensions";
+const { ANIME } = pkg;
 
 const router = Router();
 
-const gogoanime = new ANIME.Gogoanime();
-const hianime = new ANIME.HiAnime();
+const animePahe = new ANIME.AnimePahe();
 
 router.get("/search", async (req: Request, res: Response) => {
   try {
@@ -14,16 +14,16 @@ router.get("/search", async (req: Request, res: Response) => {
       return;
     }
 
-    let results = await gogoanime.search(q);
+    let results = await animePahe.search(q);
 
     if (!results.results || results.results.length === 0) {
       const titleWords = q.split(" ").slice(0, 3).join(" ");
-      results = await gogoanime.search(titleWords);
+      results = await animePahe.search(titleWords);
     }
 
     res.json({
-      provider: "gogoanime",
-      results: results.results.slice(0, 10).map((r) => ({
+      provider: "animepahe",
+      results: (results.results || []).slice(0, 10).map((r: any) => ({
         id: r.id,
         title: r.title,
         url: r.url,
@@ -38,16 +38,24 @@ router.get("/search", async (req: Request, res: Response) => {
   }
 });
 
-router.get("/info/:id(*)", async (req: Request, res: Response) => {
+router.get("/info", async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
-    const info = await gogoanime.fetchAnimeInfo(id);
+    const { id } = req.query;
+    if (!id || typeof id !== "string") {
+      res.status(400).json({ error: "Se requiere el parámetro id" });
+      return;
+    }
+    const info = await animePahe.fetchAnimeInfo(id);
     res.json({
       id: info.id,
       title: info.title,
-      episodes: info.episodes?.map((ep) => ({
+      totalEpisodes: (info as any).totalEpisodes,
+      episodes: (info.episodes || []).map((ep: any) => ({
         id: ep.id,
         number: ep.number,
+        title: ep.title,
+        image: ep.image,
+        duration: ep.duration,
         url: ep.url,
       })),
     });
@@ -57,14 +65,18 @@ router.get("/info/:id(*)", async (req: Request, res: Response) => {
   }
 });
 
-router.get("/watch/:episodeId(*)", async (req: Request, res: Response) => {
+router.get("/watch", async (req: Request, res: Response) => {
   try {
-    const { episodeId } = req.params;
-    const sources = await gogoanime.fetchEpisodeSources(episodeId);
+    const { id } = req.query;
+    if (!id || typeof id !== "string") {
+      res.status(400).json({ error: "Se requiere el parámetro id" });
+      return;
+    }
+    const sources = await animePahe.fetchEpisodeSources(id);
 
     res.json({
-      episodeId,
-      sources: sources.sources?.map((s) => ({
+      episodeId: id,
+      sources: (sources.sources || []).map((s: any) => ({
         url: s.url,
         quality: s.quality,
         isM3U8: s.isM3U8,
@@ -78,36 +90,47 @@ router.get("/watch/:episodeId(*)", async (req: Request, res: Response) => {
   }
 });
 
-router.get("/embed/:animeId/:episode", async (req: Request, res: Response) => {
+router.get("/embed", async (req: Request, res: Response) => {
   try {
-    const { animeId, episode } = req.params;
+    const { animeId, episode } = req.query;
+    if (!animeId || typeof animeId !== "string" || !episode || typeof episode !== "string") {
+      res.status(400).json({ error: "Se requieren animeId y episode" });
+      return;
+    }
     const epNum = parseInt(episode, 10);
+    if (Number.isNaN(epNum) || epNum <= 0) {
+      res.status(400).json({ error: "Número de episodio inválido" });
+      return;
+    }
 
-    const info = await gogoanime.fetchAnimeInfo(animeId);
-    const ep = info.episodes?.find((e) => e.number === epNum);
+    const info = await animePahe.fetchAnimeInfo(animeId);
+    const ep = (info.episodes || []).find((e: any) => e.number === epNum);
 
     if (!ep) {
       res.status(404).json({ error: `Episodio ${episode} no encontrado` });
       return;
     }
 
-    const sources = await gogoanime.fetchEpisodeSources(ep.id);
+    const sources = await animePahe.fetchEpisodeSources(ep.id);
+
+    const allSources = (sources.sources || []).map((s: any) => ({
+      url: s.url,
+      quality: s.quality,
+      isM3U8: s.isM3U8,
+    }));
 
     const hqSource =
-      sources.sources?.find((s) => s.quality === "1080p") ||
-      sources.sources?.find((s) => s.quality === "720p") ||
-      sources.sources?.find((s) => s.quality === "480p") ||
-      sources.sources?.[0];
+      allSources.find((s: any) => s.quality?.includes("1080")) ||
+      allSources.find((s: any) => s.quality?.includes("800")) ||
+      allSources.find((s: any) => s.quality?.includes("720")) ||
+      allSources.find((s: any) => s.quality?.includes("480")) ||
+      allSources[0];
 
     res.json({
       episodeId: ep.id,
       episodeNumber: epNum,
       source: hqSource,
-      allSources: sources.sources?.map((s) => ({
-        url: s.url,
-        quality: s.quality,
-        isM3U8: s.isM3U8,
-      })),
+      allSources,
       headers: sources.headers,
       download: sources.download,
     });
