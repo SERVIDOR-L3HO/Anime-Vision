@@ -98,14 +98,22 @@ export default function AnimeDetail() {
       } else if (results.length === 1) {
         setFlvSlug(results[0].slug);
       } else {
-        const exact = results.find(
-          (r) => r.title.toLowerCase() === animeTitle.toLowerCase() ||
-                 r.title.toLowerCase() === animeTitleJp.toLowerCase()
+        const titleLower = animeTitle.toLowerCase();
+        const variants = results.filter(
+          (r) => r.title.toLowerCase().includes(titleLower) || titleLower.includes(r.title.toLowerCase())
         );
-        if (exact) {
-          setFlvSlug(exact.slug);
+        if (variants.length > 1) {
+          setFlvMultipleResults(variants.slice(0, 5));
         } else {
-          setFlvMultipleResults(results.slice(0, 5));
+          const exact = results.find(
+            (r) => r.title.toLowerCase() === titleLower ||
+                   r.title.toLowerCase() === animeTitleJp.toLowerCase()
+          );
+          if (exact) {
+            setFlvSlug(exact.slug);
+          } else {
+            setFlvMultipleResults(results.slice(0, 5));
+          }
         }
       }
     }
