@@ -58,6 +58,14 @@ Pages: Home (hero + trending), Browse (search + filters), Top Anime, Genres, Ani
 Stack: React, Vite, Tailwind CSS, Framer Motion, Wouter, Lucide Icons, hls.js.
 Serves at `/` (root preview path). Vite proxies `/api/*` → `http://localhost:8000`.
 
+**Vercel Deployment (frontend + API in one project):**
+- `vercel.json` at repo root: builds frontend from `artifacts/anime-world/dist`, API as serverless function from `api/[...path].ts`
+- `api/[...path].ts` re-exports the Express app from `artifacts/api-server/src/app.ts`
+- Root `package.json` has API deps (`express`, `cors`, `@consumet/extensions`) so Vercel's serverless runtime can resolve them
+- Frontend uses `VITE_API_URL` env var (empty string = same domain for Vercel; set to Replit URL for external API)
+- `vite.config.vercel.ts` is the Vercel-specific Vite config (no PORT/BASE_PATH required, no Replit plugins)
+- Vercel serverless functions have 60s timeout — enough for search/info/embed but may timeout on large MP4 proxy streams
+
 **Streaming System (dual provider):**
 - **AnimeFLV** (default, Spanish): Custom scraper at `api-server/src/providers/animeflv.ts`. Routes at `/api/streaming/flv/*` (search, info, servers, embed). Extracts MP4 URLs from YourUpload, Streamtape, OK.ru. Supports SUB and LAT tracks.
 - **AnimePahe** (English): Uses `@consumet/extensions`. Routes at `/api/streaming/*` (search, info, watch, embed). M3U8 streams proxied through `/api/streaming/proxy` to bypass Referer restrictions.

@@ -1,8 +1,0 @@
-{
-  "buildCommand": "cd ../.. && pnpm install && pnpm --filter @workspace/anime-world run build:vercel",
-  "outputDirectory": "dist",
-  "framework": null,
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
-  ]
-}
