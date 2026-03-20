@@ -61,7 +61,7 @@ Serves at `/` (root preview path). Vite proxies `/api/*` → `http://localhost:8
 **Streaming System (dual provider):**
 - **AnimeFLV** (default, Spanish): Custom scraper at `api-server/src/providers/animeflv.ts`. Routes at `/api/streaming/flv/*` (search, info, servers, embed). Extracts MP4 URLs from YourUpload, Streamtape, OK.ru. Supports SUB and LAT tracks.
 - **AnimePahe** (English): Uses `@consumet/extensions`. Routes at `/api/streaming/*` (search, info, watch, embed). M3U8 streams proxied through `/api/streaming/proxy` to bypass Referer restrictions.
-- **Proxy**: `/api/streaming/proxy?url=...&referer=...` rewrites M3U8 playlists, proxies segments and AES keys with correct Referer header
+- **Proxy**: `/api/streaming/proxy?url=...&referer=...` proxies all video requests (M3U8+MP4). Handles 302 redirects with allowlist validation on every hop, Range request passthrough for MP4 seeking, backpressure-safe streaming via `Readable.fromWeb().pipe()`, and client disconnect abort
 - **VideoPlayer**: hls.js for M3U8, native `<video>` for MP4, quality selector, download links
 - **Provider toggle**: UI shows "AnimeFLV (Español)" / "AnimePahe (English)" buttons in episodes tab
 - Import pattern: `import pkg from "@consumet/extensions"; const { ANIME } = pkg;`

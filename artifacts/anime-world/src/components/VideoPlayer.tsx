@@ -100,11 +100,23 @@ export function VideoPlayer({
       video.addEventListener("loadedmetadata", handleLoaded);
     } else {
       video.src = currentSource.url;
+      video.load();
       video.addEventListener("loadeddata", handleLoaded);
-      video.addEventListener("error", () => {
-        setError("Error al reproducir el video.");
+      const handleError = () => {
+        setError("Error al reproducir el video. Prueba otro servidor.");
         setIsLoading(false);
-      });
+      };
+      video.addEventListener("error", handleError);
+
+      return () => {
+        video.removeEventListener("loadedmetadata", handleLoaded);
+        video.removeEventListener("loadeddata", handleLoaded);
+        video.removeEventListener("error", handleError);
+        if (hlsRef.current) {
+          hlsRef.current.destroy();
+          hlsRef.current = null;
+        }
+      };
     }
 
     return () => {

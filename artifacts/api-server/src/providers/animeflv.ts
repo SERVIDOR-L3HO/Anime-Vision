@@ -217,15 +217,24 @@ async function extractOkru(server: VideoServer): Promise<VideoSource | null> {
 async function extractStreamtape(server: VideoServer): Promise<VideoSource | null> {
   const html = await fetchHTML(server.url);
 
-  const linkMatch = html.match(/getElementById\('robotlink'\)\.innerHTML\s*=\s*'([^']+)'/);
-  const tokenMatch = html.match(/getElementById\('robotlink'\)[\s\S]*?\+\s*\('([^']+)'\)/);
+  const match = html.match(
+    /getElementById\('robotlink'\)\.innerHTML\s*=\s*'([^']+)'\s*\+\s*\('([^']+)'\)\.substring\((\d+)\)\.substring\((\d+)\)/
+  );
 
-  if (!linkMatch) return null;
-
-  let videoUrl = linkMatch[1];
-  if (tokenMatch) {
-    videoUrl += tokenMatch[1];
+  if (!match) {
+    const simpleMatch = html.match(/getElementById\('robotlink'\)\.innerHTML\s*=\s*'([^']+)'\s*\+\s*\('([^']+)'\)/);
+    if (!simpleMatch) return null;
+    let videoUrl = simpleMatch[1] + simpleMatch[2];
+    if (!videoUrl.startsWith("http")) videoUrl = "https:" + videoUrl;
+    return { url: videoUrl, quality: `${server.lang}`, isM3U8: false, server: "Streamtape", lang: server.lang };
   }
+
+  const base = match[1];
+  const token = match[2];
+  const sub1 = parseInt(match[3], 10);
+  const sub2 = parseInt(match[4], 10);
+  const tokenPart = token.substring(sub1).substring(sub2);
+  let videoUrl = base + tokenPart;
 
   if (!videoUrl.startsWith("http")) {
     videoUrl = "https:" + videoUrl;

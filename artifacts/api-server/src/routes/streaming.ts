@@ -129,9 +129,11 @@ router.get("/flv/embed", async (req: Request, res: Response) => {
       if (sources.length >= 4) break;
       const source = await extractVideoUrl(server);
       if (source) {
-        if (source.isM3U8) {
-          source.url = buildProxyUrl(source.url, server.url);
-        }
+        const referer = server.server === "yu" ? "https://www.yourupload.com/"
+          : server.server === "stape" ? "https://streamtape.com/"
+          : server.server === "sw" ? server.url
+          : server.url;
+        source.url = buildProxyUrl(source.url, referer);
         sources.push(source);
       }
     }
@@ -271,6 +273,7 @@ const ALLOWED_PROXY_HOSTS = [
   "kwik.si",
   "streamwish.to",
   "vidcache.net",
+  "yourupload.com",
   "streamtape.com",
   "ok.ru",
   "mail.ru",
@@ -301,24 +304,54 @@ router.get("/proxy", async (req: Request, res: Response) => {
 
     const refererHeader = (typeof referer === "string" && referer) || "https://kwik.cx/";
 
-    const response = await fetch(url, {
-      headers: {
-        "Referer": refererHeader,
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      },
-    });
+    const fetchHeaders: Record<string, string> = {
+      "Referer": refererHeader,
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    };
 
-    if (!response.ok) {
-      res.status(response.status).json({ error: `Upstream returned ${response.status}` });
+    const rangeHeader = req.headers.range;
+    if (rangeHeader) {
+      fetchHeaders["Range"] = rangeHeader;
+    }
+
+    const abortController = new AbortController();
+    req.on("close", () => abortController.abort());
+
+    let currentUrl = url;
+    let response: globalThis.Response | null = null;
+    const MAX_REDIRECTS = 5;
+    for (let i = 0; i <= MAX_REDIRECTS; i++) {
+      response = await fetch(currentUrl, {
+        headers: fetchHeaders,
+        redirect: "manual",
+        signal: abortController.signal,
+      });
+      const status = response.status;
+      if (status === 301 || status === 302 || status === 307 || status === 308) {
+        const location = response.headers.get("location");
+        if (!location) break;
+        const resolved = new URL(location, currentUrl).href;
+        if (!isAllowedUrl(resolved)) {
+          res.status(403).json({ error: "Redirect a dominio no permitido" });
+          return;
+        }
+        currentUrl = resolved;
+        continue;
+      }
+      break;
+    }
+
+    if (!response || (!response.ok && response.status !== 206)) {
+      res.status(response?.status || 502).json({ error: `Upstream returned ${response?.status || "no response"}` });
       return;
     }
 
+    const finalUrl = currentUrl;
     const contentType = response.headers.get("content-type") || "";
 
     if (contentType.includes("mpegurl") || url.endsWith(".m3u8")) {
       const text = await response.text();
-
-      const baseUrl = url.substring(0, url.lastIndexOf("/") + 1);
+      const baseUrl = finalUrl.substring(0, finalUrl.lastIndexOf("/") + 1);
 
       let rewritten = text.replace(/^(?!#)(\S+)$/gm, (line) => {
         const trimmed = line.trim();
@@ -335,20 +368,25 @@ router.get("/proxy", async (req: Request, res: Response) => {
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.send(rewritten);
     } else {
-      res.setHeader("Content-Type", contentType || "video/mp2t");
+      res.status(response.status);
+      res.setHeader("Content-Type", contentType || "video/mp4");
       res.setHeader("Access-Control-Allow-Origin", "*");
 
+      const contentLength = response.headers.get("content-length");
+      if (contentLength) res.setHeader("Content-Length", contentLength);
+
+      const contentRange = response.headers.get("content-range");
+      if (contentRange) res.setHeader("Content-Range", contentRange);
+
+      const acceptRanges = response.headers.get("accept-ranges");
+      if (acceptRanges) res.setHeader("Accept-Ranges", acceptRanges);
+
       if (response.body) {
-        const reader = response.body.getReader();
-        const pump = async () => {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            res.write(value);
-          }
-          res.end();
-        };
-        pump().catch((err) => {
+        const { Readable } = await import("stream");
+        const nodeStream = Readable.fromWeb(response.body as any);
+        nodeStream.pipe(res);
+        nodeStream.on("error", (err: Error) => {
+          if (err.name === "AbortError") return;
           console.error("Stream pipe error:", err);
           if (!res.headersSent) res.status(500).end();
           else res.end();
