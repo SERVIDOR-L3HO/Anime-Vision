@@ -1,5 +1,13 @@
 import { Router, type Request, type Response } from "express";
 import pkg from "@consumet/extensions";
+import {
+  searchAnimeFlv,
+  getAnimeFlvInfo,
+  getEpisodeServers,
+  extractVideoUrl,
+  type VideoServer,
+} from "../providers/animeflv.js";
+
 const { ANIME } = pkg;
 
 const router = Router();
@@ -35,6 +43,118 @@ router.get("/search", async (req: Request, res: Response) => {
   } catch (err) {
     console.error("Error buscando anime:", err);
     res.status(500).json({ error: "Error al buscar el anime" });
+  }
+});
+
+router.get("/flv/search", async (req: Request, res: Response) => {
+  try {
+    const { q } = req.query;
+    if (!q || typeof q !== "string") {
+      res.status(400).json({ error: "Se requiere el parámetro q" });
+      return;
+    }
+
+    const results = await searchAnimeFlv(q);
+    res.json({
+      provider: "animeflv",
+      results: results.slice(0, 10),
+    });
+  } catch (err) {
+    console.error("Error buscando en AnimeFLV:", err);
+    res.status(500).json({ error: "Error al buscar en AnimeFLV" });
+  }
+});
+
+router.get("/flv/info", async (req: Request, res: Response) => {
+  try {
+    const { id } = req.query;
+    if (!id || typeof id !== "string") {
+      res.status(400).json({ error: "Se requiere el parámetro id" });
+      return;
+    }
+    const info = await getAnimeFlvInfo(id);
+    res.json(info);
+  } catch (err) {
+    console.error("Error obteniendo info AnimeFLV:", err);
+    res.status(500).json({ error: "Error al obtener información de AnimeFLV" });
+  }
+});
+
+router.get("/flv/servers", async (req: Request, res: Response) => {
+  try {
+    const { slug, episode } = req.query;
+    if (!slug || typeof slug !== "string" || !episode || typeof episode !== "string") {
+      res.status(400).json({ error: "Se requieren slug y episode" });
+      return;
+    }
+    const epNum = parseInt(episode, 10);
+    if (Number.isNaN(epNum) || epNum <= 0) {
+      res.status(400).json({ error: "Número de episodio inválido" });
+      return;
+    }
+
+    const servers = await getEpisodeServers(slug, epNum);
+    res.json({ servers });
+  } catch (err) {
+    console.error("Error obteniendo servidores:", err);
+    res.status(500).json({ error: "Error al obtener servidores del episodio" });
+  }
+});
+
+router.get("/flv/embed", async (req: Request, res: Response) => {
+  try {
+    const { slug, episode } = req.query;
+    if (!slug || typeof slug !== "string" || !episode || typeof episode !== "string") {
+      res.status(400).json({ error: "Se requieren slug y episode" });
+      return;
+    }
+    const epNum = parseInt(episode, 10);
+    if (Number.isNaN(epNum) || epNum <= 0) {
+      res.status(400).json({ error: "Número de episodio inválido" });
+      return;
+    }
+
+    const servers = await getEpisodeServers(slug, epNum);
+
+    const preferredOrder = ["yu", "sw", "okru", "stape"];
+    const sortedServers = [...servers].sort((a, b) => {
+      const aIdx = preferredOrder.indexOf(a.server);
+      const bIdx = preferredOrder.indexOf(b.server);
+      return (aIdx === -1 ? 99 : aIdx) - (bIdx === -1 ? 99 : bIdx);
+    });
+
+    const sources: any[] = [];
+
+    for (const server of sortedServers) {
+      if (sources.length >= 4) break;
+      const source = await extractVideoUrl(server);
+      if (source) {
+        if (source.isM3U8) {
+          source.url = buildProxyUrl(source.url, server.url);
+        }
+        sources.push(source);
+      }
+    }
+
+    if (sources.length === 0) {
+      res.status(404).json({ error: "No se encontraron fuentes de video reproducibles" });
+      return;
+    }
+
+    res.json({
+      episodeNumber: epNum,
+      slug,
+      provider: "animeflv",
+      allSources: sources,
+      headers: {},
+      download: sources.filter((s) => !s.isM3U8).map((s) => ({
+        url: s.url,
+        quality: `${s.quality} (${s.server})`,
+      })),
+    });
+  } catch (err) {
+    console.error("Error obteniendo embed AnimeFLV:", err);
+    res.status(500).json({ error: "Error al obtener el video del episodio" });
   }
 });
 
@@ -145,11 +265,37 @@ router.get("/embed", async (req: Request, res: Response) => {
   }
 });
 
+const ALLOWED_PROXY_HOSTS = [
+  "uwucdn.top",
+  "kwik.cx",
+  "kwik.si",
+  "streamwish.to",
+  "vidcache.net",
+  "streamtape.com",
+  "ok.ru",
+  "mail.ru",
+];
+
+function isAllowedUrl(urlStr: string): boolean {
+  try {
+    const parsed = new URL(urlStr);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
+    return ALLOWED_PROXY_HOSTS.some((host) => parsed.hostname === host || parsed.hostname.endsWith(`.${host}`));
+  } catch {
+    return false;
+  }
+}
+
 router.get("/proxy", async (req: Request, res: Response) => {
   try {
     const { url, referer } = req.query;
     if (!url || typeof url !== "string") {
       res.status(400).json({ error: "Se requiere el parámetro url" });
+      return;
+    }
+
+    if (!isAllowedUrl(url)) {
+      res.status(403).json({ error: "Dominio no permitido" });
       return;
     }
 

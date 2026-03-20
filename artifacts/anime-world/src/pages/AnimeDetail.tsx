@@ -1,7 +1,10 @@
 import { useState, useEffect } from "react";
 import { useRoute } from "wouter";
 import { useAnimeDetail, useAnimeCharacters, useAnimeEpisodes } from "@/hooks/use-jikan";
-import { useSearchAnimeStream, useAnimeStreamInfo, useEpisodeEmbed } from "@/hooks/use-streaming";
+import {
+  useSearchAnimeStream, useAnimeStreamInfo, useEpisodeEmbed,
+  useSearchFlv, useFlvInfo, useFlvEmbed,
+} from "@/hooks/use-streaming";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { LoadingSpinner, ErrorMessage } from "@/components/ui/Loading";
 import {
@@ -18,36 +21,55 @@ export default function AnimeDetail() {
   const [tab, setTab] = useState<Tab>("info");
   const [epPage, setEpPage] = useState(1);
 
+  type Provider = "animeflv" | "animepahe";
+  const [provider, setProvider] = useState<Provider>("animeflv");
   const [selectedEp, setSelectedEp] = useState<number | null>(null);
+
   const [streamAnimeId, setStreamAnimeId] = useState<string | null>(null);
   const [searchEnabled, setSearchEnabled] = useState(false);
   const [noStreamAvailable, setNoStreamAvailable] = useState(false);
   const [multipleResults, setMultipleResults] = useState<{ id: string; title: string; image?: string; subOrDub?: string }[] | null>(null);
+
+  const [flvSlug, setFlvSlug] = useState<string | null>(null);
+  const [flvSearchEnabled, setFlvSearchEnabled] = useState(false);
+  const [flvMultipleResults, setFlvMultipleResults] = useState<{ id: string; slug: string; title: string; image: string }[] | null>(null);
 
   const { data: animeData, isLoading, error } = useAnimeDetail(id);
   const { data: charData } = useAnimeCharacters(id);
   const { data: episodesData, isLoading: epLoading } = useAnimeEpisodes(id, epPage);
 
   const animeTitle = animeData?.data?.title_english || animeData?.data?.title || "";
+  const animeTitleJp = animeData?.data?.title || "";
 
   const { data: searchData, isLoading: searchLoading, error: searchError } = useSearchAnimeStream(
     animeTitle,
-    searchEnabled && !streamAnimeId
+    provider === "animepahe" && searchEnabled && !streamAnimeId
   );
 
   const { data: streamInfo, isLoading: infoLoading } = useAnimeStreamInfo(
     streamAnimeId || "",
-    !!streamAnimeId
+    provider === "animepahe" && !!streamAnimeId
   );
 
   const { data: episodeData, isLoading: embedLoading, error: embedError } = useEpisodeEmbed(
     streamAnimeId || "",
     selectedEp,
-    !!streamAnimeId && selectedEp !== null
+    provider === "animepahe" && !!streamAnimeId && selectedEp !== null
+  );
+
+  const { data: flvSearchData, isLoading: flvSearchLoading, error: flvSearchError } = useSearchFlv(
+    animeTitleJp || animeTitle,
+    provider === "animeflv" && flvSearchEnabled && !flvSlug
+  );
+
+  const { data: flvEpisodeData, isLoading: flvEmbedLoading, error: flvEmbedError } = useFlvEmbed(
+    flvSlug || "",
+    selectedEp,
+    provider === "animeflv" && !!flvSlug && selectedEp !== null
   );
 
   useEffect(() => {
-    if (searchData && !streamAnimeId) {
+    if (searchData && !streamAnimeId && provider === "animepahe") {
       const results = searchData.results;
       if (results.length === 0) {
         setSearchEnabled(false);
@@ -67,16 +89,64 @@ export default function AnimeDetail() {
     }
   }, [searchData]);
 
+  useEffect(() => {
+    if (flvSearchData && !flvSlug && provider === "animeflv") {
+      const results = flvSearchData.results;
+      if (results.length === 0) {
+        setFlvSearchEnabled(false);
+        setNoStreamAvailable(true);
+      } else if (results.length === 1) {
+        setFlvSlug(results[0].slug);
+      } else {
+        const exact = results.find(
+          (r) => r.title.toLowerCase() === animeTitle.toLowerCase() ||
+                 r.title.toLowerCase() === animeTitleJp.toLowerCase()
+        );
+        if (exact) {
+          setFlvSlug(exact.slug);
+        } else {
+          setFlvMultipleResults(results.slice(0, 5));
+        }
+      }
+    }
+  }, [flvSearchData]);
+
   const handleWatchEpisode = (epNumber: number) => {
     setSelectedEp(epNumber);
-    if (!streamAnimeId) {
+    if (provider === "animepahe" && !streamAnimeId) {
       setSearchEnabled(true);
+    }
+    if (provider === "animeflv" && !flvSlug) {
+      setFlvSearchEnabled(true);
     }
   };
 
   const handleClosePlayer = () => {
     setSelectedEp(null);
     setNoStreamAvailable(false);
+  };
+
+  const resetStreamingState = () => {
+    setSelectedEp(null);
+    setNoStreamAvailable(false);
+    setMultipleResults(null);
+    setFlvMultipleResults(null);
+    setStreamAnimeId(null);
+    setFlvSlug(null);
+    setSearchEnabled(false);
+    setFlvSearchEnabled(false);
+  };
+
+  useEffect(() => {
+    resetStreamingState();
+  }, [id]);
+
+  const handleSwitchProvider = (p: Provider) => {
+    setProvider(p);
+    setSelectedEp(null);
+    setNoStreamAvailable(false);
+    setMultipleResults(null);
+    setFlvMultipleResults(null);
   };
 
   if (isLoading) return <div className="pt-32"><LoadingSpinner /></div>;
@@ -88,7 +158,14 @@ export default function AnimeDetail() {
   const episodes = episodesData?.data || [];
   const hasNextEpPage = episodesData?.pagination?.has_next_page ?? false;
 
-  const isPlayerLoading = searchLoading || infoLoading || (!!streamAnimeId && embedLoading && selectedEp !== null);
+  const isPlayerLoading = provider === "animepahe"
+    ? (searchLoading || infoLoading || (!!streamAnimeId && embedLoading && selectedEp !== null))
+    : (flvSearchLoading || (!!flvSlug && flvEmbedLoading && selectedEp !== null));
+
+  const activeEpisodeData = provider === "animepahe" ? episodeData : flvEpisodeData;
+  const activeError = provider === "animepahe" ? (searchError || embedError) : (flvSearchError || flvEmbedError);
+  const hasStreamId = provider === "animepahe" ? !!streamAnimeId : !!flvSlug;
+  const activeMultipleResults = provider === "animepahe" ? multipleResults : flvMultipleResults;
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode; hidden?: boolean }[] = [
     { id: "info", label: "Información", icon: <BookOpen className="w-4 h-4" /> },
@@ -258,6 +335,31 @@ export default function AnimeDetail() {
               {/* Tab: Episodes */}
               {tab === "episodes" && (
                 <div>
+                  {/* Provider Toggle */}
+                  <div className="flex items-center gap-2 mb-4">
+                    <span className="text-muted-foreground text-xs font-medium mr-1">Servidor:</span>
+                    <button
+                      onClick={() => handleSwitchProvider("animeflv")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        provider === "animeflv"
+                          ? "bg-green-500/20 text-green-400 border border-green-500/40"
+                          : "bg-white/5 text-white/50 border border-white/10 hover:text-white/80"
+                      }`}
+                    >
+                      AnimeFLV (Español)
+                    </button>
+                    <button
+                      onClick={() => handleSwitchProvider("animepahe")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        provider === "animepahe"
+                          ? "bg-blue-500/20 text-blue-400 border border-blue-500/40"
+                          : "bg-white/5 text-white/50 border border-white/10 hover:text-white/80"
+                      }`}
+                    >
+                      AnimePahe (English)
+                    </button>
+                  </div>
+
                   {/* Video Player Area */}
                   <AnimatePresence>
                     {selectedEp !== null && (
@@ -273,25 +375,31 @@ export default function AnimeDetail() {
                             <div className="text-center">
                               <p className="text-white font-semibold">Buscando episodio {selectedEp}...</p>
                               <p className="text-muted-foreground text-sm mt-1">
-                                {searchLoading ? "Buscando en servidores de streaming..." :
+                                {provider === "animeflv" ? "Buscando en AnimeFLV..." :
+                                 searchLoading ? "Buscando en servidores de streaming..." :
                                  infoLoading ? "Obteniendo lista de episodios..." :
                                  "Cargando fuentes de video..."}
                               </p>
                             </div>
                           </div>
-                        ) : multipleResults && !streamAnimeId ? (
+                        ) : activeMultipleResults && !hasStreamId ? (
                           <div className="bg-black/40 rounded-2xl border border-white/10 p-5">
                             <div className="flex items-center gap-2 mb-4">
                               <Search className="w-5 h-5 text-primary" />
                               <h4 className="text-white font-bold">Selecciona el anime correcto</h4>
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                              {multipleResults.map((r) => (
+                              {activeMultipleResults.map((r: any) => (
                                 <button
                                   key={r.id}
                                   onClick={() => {
-                                    setStreamAnimeId(r.id);
-                                    setMultipleResults(null);
+                                    if (provider === "animepahe") {
+                                      setStreamAnimeId(r.id);
+                                      setMultipleResults(null);
+                                    } else {
+                                      setFlvSlug(r.slug || r.id);
+                                      setFlvMultipleResults(null);
+                                    }
                                   }}
                                   className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/10 hover:border-primary/50 hover:bg-primary/5 transition-all text-left"
                                 >
@@ -302,6 +410,9 @@ export default function AnimeDetail() {
                                     <p className="text-white font-semibold text-sm leading-tight line-clamp-2">{r.title as string}</p>
                                     {r.subOrDub && (
                                       <span className="text-xs text-primary font-bold uppercase mt-1 block">{r.subOrDub}</span>
+                                    )}
+                                    {r.type && (
+                                      <span className="text-xs text-muted-foreground mt-1 block">{r.type}</span>
                                     )}
                                   </div>
                                 </button>
@@ -314,7 +425,7 @@ export default function AnimeDetail() {
                             <div className="text-center">
                               <p className="text-white font-semibold">Streaming no disponible</p>
                               <p className="text-muted-foreground text-sm mt-1">
-                                No se encontró este anime en los servidores de streaming.
+                                No se encontró en {provider === "animeflv" ? "AnimeFLV" : "AnimePahe"}. Prueba con el otro servidor.
                               </p>
                             </div>
                             <button
@@ -324,7 +435,7 @@ export default function AnimeDetail() {
                               Cerrar
                             </button>
                           </div>
-                        ) : (searchError || embedError) && !isPlayerLoading ? (
+                        ) : activeError && !isPlayerLoading ? (
                           <div className="flex flex-col items-center justify-center py-12 gap-4 bg-black/40 rounded-2xl border border-red-500/20">
                             <AlertCircle className="w-10 h-10 text-red-400" />
                             <div className="text-center">
@@ -340,13 +451,14 @@ export default function AnimeDetail() {
                               Cerrar
                             </button>
                           </div>
-                        ) : episodeData && streamAnimeId ? (
+                        ) : activeEpisodeData && hasStreamId ? (
                           <VideoPlayer
-                            sources={episodeData.allSources}
-                            headers={episodeData.headers}
-                            download={episodeData.download}
+                            sources={activeEpisodeData.allSources}
+                            headers={activeEpisodeData.headers}
+                            download={activeEpisodeData.download}
                             episodeNumber={selectedEp}
                             animeTitle={anime.title_english || anime.title}
+                            provider={provider}
                             onClose={handleClosePlayer}
                           />
                         ) : null}

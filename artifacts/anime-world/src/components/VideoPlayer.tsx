@@ -7,6 +7,8 @@ interface Source {
   url: string;
   quality: string;
   isM3U8: boolean;
+  server?: string;
+  lang?: string;
 }
 
 interface DownloadLink {
@@ -20,6 +22,7 @@ interface VideoPlayerProps {
   download?: DownloadLink[];
   episodeNumber?: number;
   animeTitle?: string;
+  provider?: string;
   onClose?: () => void;
 }
 
@@ -29,6 +32,7 @@ export function VideoPlayer({
   download,
   episodeNumber,
   animeTitle,
+  provider,
   onClose,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -47,12 +51,14 @@ export function VideoPlayer({
     return (aIdx === -1 ? 99 : aIdx) - (bIdx === -1 ? 99 : bIdx);
   });
 
+  const sourceKey = (s: Source) => `${s.quality}|${s.server || ""}|${s.lang || ""}`;
+
   const currentSource =
-    sortedSources.find((s) => s.quality === selectedQuality) || sortedSources[0];
+    sortedSources.find((s) => sourceKey(s) === selectedQuality) || sortedSources[0];
 
   useEffect(() => {
     if (sortedSources.length > 0 && !selectedQuality) {
-      setSelectedQuality(sortedSources[0].quality);
+      setSelectedQuality(sourceKey(sortedSources[0]));
     }
   }, [sources]);
 
@@ -163,7 +169,7 @@ export function VideoPlayer({
                 onClick={() => setShowQualityMenu((v) => !v)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/20 hover:bg-primary/30 text-primary text-xs font-bold transition-all"
               >
-                {selectedQuality || sortedSources[0]?.quality}
+                {currentSource?.server ? `${currentSource.quality} (${currentSource.server})` : currentSource?.quality || sortedSources[0]?.quality}
                 <ChevronDown className="w-3 h-3" />
               </button>
               <AnimatePresence>
@@ -174,22 +180,26 @@ export function VideoPlayer({
                     exit={{ opacity: 0, y: -5 }}
                     className="absolute right-0 top-full mt-1 bg-black border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden min-w-[100px]"
                   >
-                    {sortedSources.map((s) => (
-                      <button
-                        key={s.quality}
-                        onClick={() => {
-                          setSelectedQuality(s.quality);
-                          setShowQualityMenu(false);
-                        }}
-                        className={`w-full text-left px-4 py-2 text-sm transition-colors ${
-                          s.quality === selectedQuality
-                            ? "text-primary bg-primary/10 font-bold"
-                            : "text-white/80 hover:bg-white/10 hover:text-white"
-                        }`}
-                      >
-                        {s.quality}
-                      </button>
-                    ))}
+                    {sortedSources.map((s) => {
+                      const key = sourceKey(s);
+                      const label = s.server ? `${s.quality} (${s.server})` : s.quality;
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => {
+                            setSelectedQuality(key);
+                            setShowQualityMenu(false);
+                          }}
+                          className={`w-full text-left px-4 py-2 text-sm transition-colors ${
+                            key === selectedQuality
+                              ? "text-primary bg-primary/10 font-bold"
+                              : "text-white/80 hover:bg-white/10 hover:text-white"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -228,7 +238,7 @@ export function VideoPlayer({
 
       <div className="px-4 py-2 bg-black/60 border-t border-white/5">
         <p className="text-muted-foreground text-xs text-center">
-          Video proporcionado por AnimePahe
+          Video proporcionado por {provider === "animeflv" ? "AnimeFLV" : "AnimePahe"}
         </p>
       </div>
     </motion.div>

@@ -58,12 +58,12 @@ Pages: Home (hero + trending), Browse (search + filters), Top Anime, Genres, Ani
 Stack: React, Vite, Tailwind CSS, Framer Motion, Wouter, Lucide Icons, hls.js.
 Serves at `/` (root preview path). Vite proxies `/api/*` → `http://localhost:8000`.
 
-**Streaming System:**
-- Uses `@consumet/extensions` AnimePahe provider for video sources
-- API routes at `/api/streaming/*` (search, info, watch, embed) in api-server
-- VideoPlayer component with hls.js for M3U8 playback + quality selector + download links
-- Episode tab in AnimeDetail auto-searches AnimePahe by anime title, shows video player inline
-- AnimePahe returns M3U8 streams from uwucdn.top (360p/800p) with Referer header required
+**Streaming System (dual provider):**
+- **AnimeFLV** (default, Spanish): Custom scraper at `api-server/src/providers/animeflv.ts`. Routes at `/api/streaming/flv/*` (search, info, servers, embed). Extracts MP4 URLs from YourUpload, Streamtape, OK.ru. Supports SUB and LAT tracks.
+- **AnimePahe** (English): Uses `@consumet/extensions`. Routes at `/api/streaming/*` (search, info, watch, embed). M3U8 streams proxied through `/api/streaming/proxy` to bypass Referer restrictions.
+- **Proxy**: `/api/streaming/proxy?url=...&referer=...` rewrites M3U8 playlists, proxies segments and AES keys with correct Referer header
+- **VideoPlayer**: hls.js for M3U8, native `<video>` for MP4, quality selector, download links
+- **Provider toggle**: UI shows "AnimeFLV (Español)" / "AnimePahe (English)" buttons in episodes tab
 - Import pattern: `import pkg from "@consumet/extensions"; const { ANIME } = pkg;`
 
 ## Packages
