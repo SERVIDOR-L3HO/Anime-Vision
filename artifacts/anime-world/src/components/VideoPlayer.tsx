@@ -75,13 +75,7 @@ export function VideoPlayer({
     video.removeEventListener("loadeddata", handleLoaded);
 
     if (currentSource.isM3U8 && Hls.isSupported()) {
-      const hls = new Hls({
-        xhrSetup: (xhr) => {
-          if (headers?.Referer) {
-            xhr.setRequestHeader("X-Referer", headers.Referer);
-          }
-        },
-      });
+      const hls = new Hls();
       hlsRef.current = hls;
       hls.loadSource(currentSource.url);
       hls.attachMedia(video);
@@ -228,7 +222,6 @@ export function VideoPlayer({
           ref={videoRef}
           controls
           className="absolute inset-0 w-full h-full"
-          crossOrigin="anonymous"
           playsInline
         />
       </div>

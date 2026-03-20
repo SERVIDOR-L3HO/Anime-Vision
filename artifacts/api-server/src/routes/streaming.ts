@@ -90,6 +90,10 @@ router.get("/watch", async (req: Request, res: Response) => {
   }
 });
 
+function buildProxyUrl(originalUrl: string, referer: string): string {
+  return `/api/streaming/proxy?url=${encodeURIComponent(originalUrl)}&referer=${encodeURIComponent(referer)}`;
+}
+
 router.get("/embed", async (req: Request, res: Response) => {
   try {
     const { animeId, episode } = req.query;
@@ -112,9 +116,10 @@ router.get("/embed", async (req: Request, res: Response) => {
     }
 
     const sources = await animePahe.fetchEpisodeSources(ep.id);
+    const referer = sources.headers?.Referer || "https://kwik.cx/";
 
     const allSources = (sources.sources || []).map((s: any) => ({
-      url: s.url,
+      url: s.isM3U8 ? buildProxyUrl(s.url, referer) : s.url,
       quality: s.quality,
       isM3U8: s.isM3U8,
     }));
@@ -137,6 +142,81 @@ router.get("/embed", async (req: Request, res: Response) => {
   } catch (err) {
     console.error("Error obteniendo embed:", err);
     res.status(500).json({ error: "Error al obtener el video del episodio" });
+  }
+});
+
+router.get("/proxy", async (req: Request, res: Response) => {
+  try {
+    const { url, referer } = req.query;
+    if (!url || typeof url !== "string") {
+      res.status(400).json({ error: "Se requiere el parámetro url" });
+      return;
+    }
+
+    const refererHeader = (typeof referer === "string" && referer) || "https://kwik.cx/";
+
+    const response = await fetch(url, {
+      headers: {
+        "Referer": refererHeader,
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      },
+    });
+
+    if (!response.ok) {
+      res.status(response.status).json({ error: `Upstream returned ${response.status}` });
+      return;
+    }
+
+    const contentType = response.headers.get("content-type") || "";
+
+    if (contentType.includes("mpegurl") || url.endsWith(".m3u8")) {
+      const text = await response.text();
+
+      const baseUrl = url.substring(0, url.lastIndexOf("/") + 1);
+
+      let rewritten = text.replace(/^(?!#)(\S+)$/gm, (line) => {
+        const trimmed = line.trim();
+        if (!trimmed) return line;
+        const segmentUrl = trimmed.startsWith("http") ? trimmed : baseUrl + trimmed;
+        return `/api/streaming/proxy?url=${encodeURIComponent(segmentUrl)}&referer=${encodeURIComponent(refererHeader)}`;
+      });
+
+      rewritten = rewritten.replace(/(URI=")(https?:\/\/[^"]+)(")/g, (_match, prefix, keyUrl, suffix) => {
+        return `${prefix}/api/streaming/proxy?url=${encodeURIComponent(keyUrl)}&referer=${encodeURIComponent(refererHeader)}${suffix}`;
+      });
+
+      res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.send(rewritten);
+    } else {
+      res.setHeader("Content-Type", contentType || "video/mp2t");
+      res.setHeader("Access-Control-Allow-Origin", "*");
+
+      if (response.body) {
+        const reader = response.body.getReader();
+        const pump = async () => {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            res.write(value);
+          }
+          res.end();
+        };
+        pump().catch((err) => {
+          console.error("Stream pipe error:", err);
+          if (!res.headersSent) res.status(500).end();
+          else res.end();
+        });
+      } else {
+        const buffer = await response.arrayBuffer();
+        res.send(Buffer.from(buffer));
+      }
+    }
+  } catch (err) {
+    console.error("Proxy error:", err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Error en el proxy de streaming" });
+    }
   }
 });
 
