@@ -6,7 +6,7 @@ import {
   getEpisodeServers,
   extractVideoUrl,
   type VideoServer,
-} from "../providers/animeflv.js";
+} from "../providers/animeflv";
 
 const { ANIME } = pkg;
 
