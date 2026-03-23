@@ -1,5 +1,5 @@
 {
-  "buildCommand": "pnpm --filter @workspace/anime-world run build:vercel",
+  "buildCommand": "cd artifacts/anime-world && pnpm run build:vercel",
   "outputDirectory": "artifacts/anime-world/dist",
   "framework": null,
   "installCommand": "pnpm install",
